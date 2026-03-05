@@ -1,231 +1,318 @@
 import React, { useEffect, useState } from "react";
 
 function ViewOpportunities() {
+
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
 
   const [opportunities, setOpportunities] = useState([]);
-  const [editingId, setEditingId] = useState(null);
-  const [editData, setEditData] = useState({
-    title: "",
-    description: "",
-    location: "",
-    duration: "",
-    required_skills: ""
-  });
-  const [loadingId, setLoadingId] = useState(null);
-  const [countdowns, setCountdowns] = useState({});
+  const [appliedIds, setAppliedIds] = useState([]);
+  const [loadingApplyId, setLoadingApplyId] = useState(null);
+  const [applications, setApplications] = useState({});
+  const [search, setSearch] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
 
-  // FETCH ALL OPPORTUNITIES
+
+  // FETCH OPPORTUNITIES
   useEffect(() => {
+
     fetch("http://localhost:5000/api/opportunities")
       .then(res => res.json())
-      .then(data => {
-        setOpportunities(data);
-
-        // Initialize countdowns immediately
-        const initialCountdowns = {};
-        data.forEach((opp) => {
-          if (opp.expiryDate) {
-            const diff = new Date(opp.expiryDate) - new Date();
-            initialCountdowns[opp._id] = formatDiff(diff);
-          }
-        });
-        setCountdowns(initialCountdowns);
-      })
+      .then(data => setOpportunities(data))
       .catch(err => console.log(err));
+
   }, []);
 
-  // Countdown updater
+
+  // FETCH VOLUNTEER APPLICATIONS
   useEffect(() => {
-    const interval = setInterval(() => {
-      const newCountdowns = {};
 
-      opportunities.forEach((opp) => {
-        if (!opp.expiryDate) return;
+    if (!user || user.role?.toLowerCase() !== "volunteer") return;
 
-        const diff = new Date(opp.expiryDate) - new Date();
-        newCountdowns[opp._id] = formatDiff(diff);
-      });
+    fetch(`http://localhost:5000/api/applications/user/${user._id}`)
+      .then(res => res.json())
+      .then(data => {
 
-      setCountdowns(newCountdowns);
-    }, 1000);
+        const ids = data.map(app => app.opportunityId);
 
-    return () => clearInterval(interval);
-  }, [opportunities]);
+        setAppliedIds(ids);
 
-  // Helper to format time difference
-  const formatDiff = (diff) => {
-    if (diff <= 0) return "Expired";
+      })
+      .catch(err => console.log(err));
 
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    const minutes = Math.floor((diff / (1000 * 60)) % 60);
-    const seconds = Math.floor((diff / 1000) % 60);
+  }, [user]);
 
-    return `${days}d ${hours}h ${minutes}m ${seconds}s`;
-  };
 
-  // DELETE
-  const deleteOpportunity = async (id) => {
-    try {
-      await fetch(`http://localhost:5000/api/opportunities/${id}`, {
-        method: "DELETE"
-      });
+  // FETCH NGO APPLICATIONS
+  useEffect(() => {
 
-      setOpportunities(prev => prev.filter((opp) => opp._id !== id));
-    } catch (error) {
-      console.log(error);
-    }
-  };
+    if (!user || user.role?.toLowerCase() !== "ngo") return;
 
-  // START EDIT
-  const startEdit = (opp) => {
-    setEditingId(opp._id);
-    setEditData({
-      title: opp.title || "",
-      description: opp.description || "",
-      location: opp.location || "",
-      duration: opp.duration || "",
-      required_skills: opp.required_skills?.join(", ") || ""
+    opportunities.forEach((opp) => {
+
+      fetch(`http://localhost:5000/api/applications/opportunity/${opp._id}`)
+        .then(res => res.json())
+        .then(data => {
+
+          setApplications(prev => ({
+            ...prev,
+            [opp._id]: data
+          }));
+
+        })
+        .catch(err => console.log(err));
+
     });
-  };
 
-  // UPDATE
-  const handleUpdate = async (id) => {
-    setLoadingId(id);
-    try {
-      const updatedData = {
-        title: editData.title,
-        description: editData.description,
-        location: editData.location,
-        duration: editData.duration,
-        required_skills: editData.required_skills
-          .split(",")
-          .map(s => s.trim())
-          .filter(Boolean)
-      };
+  }, [opportunities, user]);
 
-      const res = await fetch(`http://localhost:5000/api/opportunities/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedData)
-      });
 
-      if (!res.ok) throw new Error("Failed to update opportunity");
+  // APPLY FUNCTION
+  const handleApply = async (opportunityId) => {
 
-      const updatedOpp = await res.json();
-      setOpportunities(prev => prev.map(opp => (opp._id === id ? updatedOpp : opp)));
-      setEditingId(null);
-    } catch (error) {
-      console.log(error);
-    } finally {
-      setLoadingId(null);
+    if (!user) {
+      alert("Please login first");
+      return;
     }
+
+    setLoadingApplyId(opportunityId);
+
+    try {
+
+      const res = await fetch(
+        "http://localhost:5000/api/applications/apply",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            volunteerId: user._id,
+            opportunityId
+          })
+        }
+      );
+
+      const data = await res.json();
+
+      alert(data.message);
+
+      if (data.message === "Application submitted successfully") {
+
+        setAppliedIds(prev => [...prev, opportunityId]);
+
+      }
+
+    } catch (error) {
+
+      console.log(error);
+
+    }
+
+    setLoadingApplyId(null);
+
   };
+
+
+  // ACCEPT / REJECT
+  const updateStatus = async (applicationId, status, opportunityId) => {
+
+    try {
+
+      await fetch(
+        `http://localhost:5000/api/applications/update-status/${applicationId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ status })
+        }
+      );
+
+      setApplications(prev => ({
+        ...prev,
+        [opportunityId]: prev[opportunityId].map(app =>
+          app._id === applicationId
+            ? { ...app, status }
+            : app
+        )
+      }));
+
+    } catch (error) {
+
+      console.log(error);
+
+    }
+
+  };
+
 
   return (
     <div className="p-8">
-      <h2 className="text-2xl font-bold mb-6">All Opportunities</h2>
 
-      {opportunities.length === 0 && <p>No opportunities available.</p>}
+      <h2 className="text-2xl font-bold mb-6">
+        All Opportunities
+      </h2>
 
-      {opportunities.map((opp) => (
-        <div key={opp._id} className="border p-4 mb-4 rounded shadow bg-white">
-          {editingId === opp._id ? (
-            <>
-              <input
-                className="border p-2 mb-2 w-full"
-                value={editData.title}
-                onChange={(e) => setEditData({ ...editData, title: e.target.value })}
-                placeholder="Title"
-              />
-              <textarea
-                className="border p-2 mb-2 w-full"
-                value={editData.description}
-                onChange={(e) => setEditData({ ...editData, description: e.target.value })}
-                placeholder="Description"
-              />
-              <input
-                className="border p-2 mb-2 w-full"
-                value={editData.location}
-                onChange={(e) => setEditData({ ...editData, location: e.target.value })}
-                placeholder="Location"
-              />
-              <input
-                className="border p-2 mb-2 w-full"
-                value={editData.duration}
-                onChange={(e) => setEditData({ ...editData, duration: e.target.value })}
-                placeholder="Duration"
-              />
-              <input
-                className="border p-2 mb-2 w-full"
-                value={editData.required_skills}
-                onChange={(e) => setEditData({ ...editData, required_skills: e.target.value })}
-                placeholder="React, Node, MongoDB"
-              />
-              <button
-                type="button"
-                onClick={() => handleUpdate(opp._id)}
-                className={`bg-green-600 text-white px-3 py-1 mr-2 rounded ${
-                  loadingId === opp._id ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-                disabled={loadingId === opp._id}
-              >
-                {loadingId === opp._id ? "Saving..." : "Save"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEditingId(null)}
-                className="bg-gray-400 text-white px-3 py-1 rounded"
-              >
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <h3 className="font-bold text-lg">{opp.title}</h3>
-              <p className="mb-2">{opp.description}</p>
-              <p className="text-sm"><strong>Location:</strong> {opp.location}</p>
-              <p className="text-sm"><strong>Duration:</strong> {opp.duration}</p>
-              <p className="text-sm"><strong>Skills:</strong> {opp.required_skills?.join(", ")}</p>
 
-              {/* Countdown */}
-              <p className="text-sm font-semibold text-red-600">
-                Expires in: {countdowns[opp._id] || "Calculating..."}
-              </p>
+      {/* SEARCH */}
+      <input
+        type="text"
+        placeholder="Search opportunities..."
+        className="border p-2 mb-4 w-full"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
 
-              {user && user.role?.toLowerCase() === "ngo" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => startEdit(opp)}
-                    className="bg-yellow-500 text-white px-3 py-1 mt-3 mr-2 rounded"
-                  >
-                    Update
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteOpportunity(opp._id)}
-                    className="bg-red-500 text-white px-3 py-1 mt-3 rounded"
-                  >
-                    Delete
-                  </button>
-                </>
-              )}
 
-              {user && user.role?.toLowerCase() === "volunteer" && (
-                <button
-                  type="button"
-                  className="bg-blue-500 text-white px-3 py-1 mt-3 rounded"
-                >
-                  Apply
-                </button>
-              )}
-            </>
+      {/* LOCATION FILTER */}
+      <select
+        className="border p-2 mb-6"
+        value={locationFilter}
+        onChange={(e) => setLocationFilter(e.target.value)}
+      >
+        <option value="">All Locations</option>
+        <option value="Remote">Remote</option>
+        <option value="Pune">Pune</option>
+        <option value="Mumbai">Mumbai</option>
+      </select>
+
+
+      {opportunities
+        .filter((opp) =>
+          (opp.title || "").toLowerCase().includes(search.toLowerCase()) &&
+          (locationFilter === "" || opp.location === locationFilter)
+        )
+        .map((opp) => (
+
+        <div
+          key={opp._id}
+          className="border p-4 mb-4 rounded shadow bg-white"
+        >
+
+          <h3 className="font-bold text-lg">
+            {opp.title}
+          </h3>
+
+          <p>{opp.description}</p>
+
+          <p>
+            <strong>Location:</strong> {opp.location}
+          </p>
+
+          <p>
+            <strong>Duration:</strong> {opp.duration}
+          </p>
+
+          <p>
+            <strong>Skills:</strong>
+            {Array.isArray(opp.required_skills)
+              ? opp.required_skills.join(", ")
+              : ""}
+          </p>
+
+
+          {/* VOLUNTEER APPLY BUTTON */}
+          {user && user.role?.toLowerCase() === "volunteer" && (
+
+            <button
+              onClick={() => handleApply(opp._id)}
+              disabled={loadingApplyId === opp._id}
+              className={`px-3 py-1 mt-3 rounded text-white ${
+                loadingApplyId === opp._id
+                  ? "bg-gray-500 cursor-not-allowed"
+                  : "bg-blue-500"
+              }`}
+            >
+
+              {loadingApplyId === opp._id
+                ? "Applying..."
+                : appliedIds.includes(opp._id)
+                ? "Applied"
+                : "Apply"}
+
+            </button>
+
           )}
+
+
+          {/* NGO APPLICATION VIEW */}
+          {user && user.role?.toLowerCase() === "ngo" && (
+
+            <div className="mt-4">
+
+              <h4 className="font-semibold">
+                Volunteer Applications
+              </h4>
+
+              {applications[opp._id]?.length === 0 && (
+                <p>No volunteers applied yet</p>
+              )}
+
+              {Array.isArray(applications[opp._id]) &&
+                applications[opp._id].map(app => (
+
+                <div
+                  key={app._id}
+                  className="border p-2 mt-2 rounded"
+                >
+
+                  <p>
+                    <strong>Name:</strong>
+                    {app.volunteerId?.name}
+                  </p>
+
+                  <p>
+                    <strong>Email:</strong>
+                    {app.volunteerId?.email}
+                  </p>
+
+                  <p>
+                    <strong>Status:</strong>
+
+                    <span className={`ml-2 px-2 py-1 rounded text-white ${
+                      app.status === "accepted"
+                        ? "bg-green-500"
+                        : app.status === "rejected"
+                        ? "bg-red-500"
+                        : "bg-yellow-500"
+                    }`}>
+                      {app.status}
+                    </span>
+
+                  </p>
+
+                  <button
+                    onClick={() =>
+                      updateStatus(app._id, "accepted", opp._id)
+                    }
+                    className="bg-green-500 text-white px-2 py-1 mr-2 rounded"
+                  >
+                    Accept
+                  </button>
+
+                  <button
+                    onClick={() =>
+                      updateStatus(app._id, "rejected", opp._id)
+                    }
+                    className="bg-red-500 text-white px-2 py-1 rounded"
+                  >
+                    Reject
+                  </button>
+
+                </div>
+
+              ))}
+
+            </div>
+
+          )}
+
         </div>
+
       ))}
+
     </div>
   );
 }

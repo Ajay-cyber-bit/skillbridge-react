@@ -7,7 +7,7 @@ function CreateOpportunity() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("user"));
 
-  // ✅ Hooks first (VERY IMPORTANT)
+  // Hooks
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -31,7 +31,17 @@ function CreateOpportunity() {
     { value: "Event Management", label: "Event Management" }
   ];
 
-  // ✅ Restrict access AFTER hooks
+  // Duration Dropdown Options
+  const durationOptions = [
+    "1 Day",
+    "3 Days",
+    "1 Week",
+    "2 Weeks",
+    "1 Month",
+    "3 Months"
+  ];
+
+  // Restrict access
   if (!user || user.role !== "ngo") {
     return (
       <div className="text-center mt-20 text-red-600 text-xl">
@@ -57,7 +67,7 @@ function CreateOpportunity() {
     try {
 
       const response = await fetch(
-        "http://localhost:5000/api/opportunities/create", // ✅ FIXED ROUTE
+        "http://localhost:5000/api/opportunities/create",
         {
           method: "POST",
           headers: {
@@ -130,15 +140,22 @@ function CreateOpportunity() {
           />
         </div>
 
-        {/* Duration */}
+        {/* Duration Dropdown */}
         <div className="mb-4">
           <label className="block font-semibold mb-2">Duration</label>
-          <input
-            type="text"
+          <select
             name="duration"
+            value={formData.duration}
             onChange={handleChange}
             className="w-full border px-3 py-2 rounded-lg"
-          />
+          >
+            <option value="">Select Duration</option>
+            {durationOptions.map((duration, index) => (
+              <option key={index} value={duration}>
+                {duration}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Location */}

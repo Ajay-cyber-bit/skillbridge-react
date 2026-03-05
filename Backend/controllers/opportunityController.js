@@ -1,10 +1,20 @@
 const Opportunity = require("../models/Opportunity");
 
+
 // ✅ CREATE OPPORTUNITY
 exports.createOpportunity = async (req, res) => {
   try {
-    const { title, description, required_skills, duration, location, ngo_id, expiryDays } = req.body;
+    const {
+      title,
+      description,
+      required_skills,
+      duration,
+      location,
+      ngo_id,
+      expiryDays
+    } = req.body;
 
+    // 🔥 Validation
     if (!title || !description || !required_skills || required_skills.length === 0) {
       return res.status(400).json({
         message: "Title, description and required skills are mandatory"
@@ -17,7 +27,7 @@ exports.createOpportunity = async (req, res) => {
       });
     }
 
-    // Set expiryDate: default 7 days if expiryDays not provided
+    // ✅ Set expiry date (default 7 days)
     const expiryDate = expiryDays
       ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -38,10 +48,12 @@ exports.createOpportunity = async (req, res) => {
     });
 
   } catch (error) {
-    console.log(error);
+    console.log("CREATE ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 // ✅ GET ALL OPPORTUNITIES
 exports.getOpportunities = async (req, res) => {
@@ -52,16 +64,18 @@ exports.getOpportunities = async (req, res) => {
     res.status(200).json(opportunities);
 
   } catch (error) {
+    console.log("GET ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 // ✅ UPDATE OPPORTUNITY
 exports.updateOpportunity = async (req, res) => {
   try {
     const { title, description, duration, location, required_skills } = req.body;
 
-    // Always include fields, even if empty
     const updateData = {
       title: title ?? "",
       description: description ?? "",
@@ -80,7 +94,6 @@ exports.updateOpportunity = async (req, res) => {
       return res.status(404).json({ message: "Opportunity not found" });
     }
 
-    // Return the full updated opportunity
     res.status(200).json(updated);
 
   } catch (error) {
@@ -88,6 +101,8 @@ exports.updateOpportunity = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+
 
 // ✅ DELETE OPPORTUNITY
 exports.deleteOpportunity = async (req, res) => {
@@ -101,6 +116,7 @@ exports.deleteOpportunity = async (req, res) => {
     res.status(200).json({ message: "Deleted successfully" });
 
   } catch (error) {
+    console.log("DELETE ERROR:", error);
     res.status(500).json({ message: error.message });
   }
 };
